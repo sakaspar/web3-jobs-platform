@@ -1,0 +1,1 @@
+curl -X POST -F "pdf=@path/to/your/resume.pdf" http://localhost:3000/api/convert-pdf
