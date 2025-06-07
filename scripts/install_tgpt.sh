@@ -1,0 +1,1 @@
+curl -sSL https://github.com/aandrew-me/tgpt/releases/latest/download/tgpt-linux-amd64 -o /tmp/tgpt && chmod +x /tmp/tgpt && sudo mv /tmp/tgpt /usr/local/bin/tgpt

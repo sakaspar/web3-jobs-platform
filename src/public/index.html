@@ -84,42 +84,6 @@
     </section>
 
     <script>
-    function renderProfileCard(profile) {
-        if (!profile || !profile.name) {
-            return '';
-        }
-        return `
-        <div class="card mt-4 border-0 shadow-lg animate__animated animate__fadeIn">
-            <div class="card-body">
-                <h3 class="card-title mb-3 text-primary">${profile.name}</h3>
-                ${profile.email ? `<p class="mb-3"><i class="bi bi-envelope"></i> <strong>Email:</strong> ${profile.email}</p>` : ''}
-                ${profile.experience && profile.experience.length ? `
-                    <h5 class="mt-4">Experience</h5>
-                    <ul class="list-group mb-3">
-                        ${profile.experience.map(exp => `
-                            <li class="list-group-item">
-                                <strong>${exp.title || ''}</strong> at <strong>${exp.company || ''}</strong> <span class="text-muted">(${exp.duration || ''})</span><br>
-                                <small class="text-muted">${exp.description || ''}</small>
-                            </li>
-                        `).join('')}
-                    </ul>
-                ` : ''}
-                ${profile.education && profile.education.length ? `
-                    <h5 class="text-secondary">Education</h5>
-                    <ul class="list-group list-group-flush">
-                        ${profile.education.map(edu => `
-                            <li class="list-group-item">
-                                <strong>${edu.degree || ''}</strong>, ${edu.institution || ''} <span class="text-muted">(${edu.year || ''})</span><br>
-                                <small class="text-muted">${edu.description || ''}</small>
-                            </li>
-                        `).join('')}
-                    </ul>
-                ` : ''}
-            </div>
-        </div>
-        `;
-    }
-
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById('pdfFile');
@@ -143,17 +107,33 @@
             });
 
             if (!response.ok) {
-                throw new Error('Profile extraction failed');
+                throw new Error('Text extraction failed');
             }
 
             const data = await response.json();
-            const profile = data.profile;
-            document.getElementById('profileCard').innerHTML = renderProfileCard(profile);
+            // Show the JSON as formatted code
+            document.getElementById('profileCard').innerHTML = `
+                <div class="card mt-4 border-0 shadow-lg animate__animated animate__fadeIn">
+                    <div class="card-body">
+                        <pre style="white-space: pre-wrap;">${escapeHtml(data.tgptJson)}</pre>
+                    </div>
+                </div>
+            `;
         } catch (error) {
             console.error('Error:', error);
-            alert('Error extracting profile. Please try again.');
+            alert('Error extracting text. Please try again.');
         }
     });
+
+    // Escape HTML for safe display
+    function escapeHtml(text) {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
     </script>
 </body>
 </html> 

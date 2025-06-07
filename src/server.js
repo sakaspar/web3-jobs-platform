@@ -5,6 +5,7 @@ const path = require('path');
 const request = require('request');
 const pdfConverter = require('./services/pdfConverter');
 const pdfProfileExtractor = require('./services/pdfProfileExtractor');
+const tgptService = require('./services/tgptService');
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -91,11 +92,20 @@ app.post('/api/parse-profile', upload.single('pdf'), async (req, res) => {
         }
         const pdfData = new Uint8Array(req.file.buffer);
         const text = await pdfProfileExtractor.extractTextFromPdf(pdfData);
-        const profile = pdfProfileExtractor.parseProfileFromText(text);
-        res.json({ profile });
+        console.log('--- Extracted PDF Text Start ---');
+        console.log(text);
+        console.log('--- Extracted PDF Text End ---');
+
+        // Prompt for tgpt
+        const prompt = `Please extract the following resume text into a JSON object with fields: name, email, phone, experience (array of {title, company, duration, description}), education (array of {degree, institution, year}), and skills (array). Here is the text:`;
+        const tgptJson = await tgptService.callTgpt(prompt, text);
+        console.log('--- tgpt JSON Output Start ---');
+        console.log(tgptJson);
+        console.log('--- tgpt JSON Output End ---');
+        res.json({ tgptJson });
     } catch (error) {
-        console.error('Error extracting profile:', error);
-        res.status(500).json({ error: 'Error extracting profile from PDF' });
+        console.error('Error extracting or processing text from PDF:', error);
+        res.status(500).json({ error: 'Error extracting or processing text from PDF' });
     }
 });
 

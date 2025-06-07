@@ -1,87 +1,99 @@
 const pdfjsLib = require('pdfjs-dist');
 
+// Suppress PDF.js warnings
+const originalConsoleWarn = console.warn;
+console.warn = function(msg) {
+    if (msg.includes('TT: undefined function') || msg.includes('fetchStandardFontData')) {
+        return; // Suppress font-related warnings
+    }
+    originalConsoleWarn.apply(console, arguments);
+};
+
 async function extractTextFromPdf(pdfBuffer) {
-    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    const loadingTask = pdfjsLib.getDocument({ 
+        data: pdfBuffer,
+        cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+        cMapPacked: true,
+        disableFontFace: true, // Disable custom font loading
+        useSystemFonts: true, // Use system fonts as fallback
+        standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/'
+    });
     const pdf = await loadingTask.promise;
     let fullText = '';
+    
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fullText += pageText + '\n';
+        const textContent = await page.getTextContent({
+            normalizeWhitespace: false,
+            disableCombineTextItems: false
+        });
+        
+        // Group text items by their vertical position to maintain paragraph structure
+        const textItems = textContent.items;
+        const lines = groupTextItemsByLine(textItems);
+        
+        // Process each line
+        for (const line of lines) {
+            if (line.text.trim()) {
+                fullText += line.text + '\n';
+            }
+        }
+        
+        // Add page separator
+        fullText += '\n--- Page ' + i + ' ---\n\n';
     }
+    
     return fullText;
 }
 
-function parseProfileFromText(text) {
-    // Simple regex-based extraction (can be improved for more accuracy)
-    const lines = text.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
-    const profile = {
-        name: '',
-        email: '',
-        experience: [],
-        education: []
-    };
+function groupTextItemsByLine(textItems) {
+    const lines = [];
+    let currentLine = { text: '', items: [] };
+    let lastY = null;
+    const LINE_HEIGHT_THRESHOLD = 5; // Adjust this value based on your needs
 
-    // Name: Assume first non-empty line is the name
-    if (lines.length > 0) profile.name = lines[0];
+    // Sort items by vertical position (top to bottom)
+    textItems.sort((a, b) => b.transform[5] - a.transform[5]);
 
-    // Email
-    const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-    if (emailMatch) profile.email = emailMatch[0];
-
-    // Experience (look for lines containing keywords)
-    let expSection = false;
-    let eduSection = false;
-    let currentExp = null;
-    let currentEdu = null;
-    for (let line of lines) {
-        if (/experience|work history|professional/i.test(line)) {
-            expSection = true;
-            eduSection = false;
-            continue;
+    textItems.forEach(item => {
+        const y = Math.round(item.transform[5]);
+        
+        if (lastY === null) {
+            lastY = y;
         }
-        if (/education|diploma|degree/i.test(line)) {
-            eduSection = true;
-            expSection = false;
-            continue;
+
+        // If Y position changes significantly, start a new line
+        if (Math.abs(y - lastY) > LINE_HEIGHT_THRESHOLD) {
+            if (currentLine.text.trim()) {
+                lines.push(currentLine);
+            }
+            currentLine = { text: '', items: [], y };
+            lastY = y;
         }
-        if (expSection) {
-            // Try to extract job title, company, and duration
-            const expMatch = line.match(/(.+?) at (.+?) \((.+?)\)/i);
-            if (expMatch) {
-                if (currentExp) profile.experience.push(currentExp);
-                currentExp = {
-                    title: expMatch[1].trim(),
-                    company: expMatch[2].trim(),
-                    duration: expMatch[3].trim()
-                };
-            } else if (currentExp && line) {
-                currentExp.description = (currentExp.description || '') + ' ' + line;
+
+        // Add space between items on the same line if they're not adjacent
+        if (currentLine.items.length > 0) {
+            const lastItem = currentLine.items[currentLine.items.length - 1];
+            const lastX = lastItem.transform[4] + lastItem.width;
+            const currentX = item.transform[4];
+            
+            if (currentX - lastX > 5) { // Add space if items are not adjacent
+                currentLine.text += ' ';
             }
         }
-        if (eduSection) {
-            // Try to extract degree, institution, and year
-            const eduMatch = line.match(/(.+?), (.+?), (\d{4})/);
-            if (eduMatch) {
-                if (currentEdu) profile.education.push(currentEdu);
-                currentEdu = {
-                    degree: eduMatch[1].trim(),
-                    institution: eduMatch[2].trim(),
-                    year: eduMatch[3].trim()
-                };
-            } else if (currentEdu && line) {
-                currentEdu.description = (currentEdu.description || '') + ' ' + line;
-            }
-        }
+
+        currentLine.text += item.str;
+        currentLine.items.push(item);
+    });
+
+    // Add the last line
+    if (currentLine.text.trim()) {
+        lines.push(currentLine);
     }
-    if (currentExp) profile.experience.push(currentExp);
-    if (currentEdu) profile.education.push(currentEdu);
 
-    return profile;
+    return lines;
 }
 
 module.exports = {
-    extractTextFromPdf,
-    parseProfileFromText
+    extractTextFromPdf
 }; 
